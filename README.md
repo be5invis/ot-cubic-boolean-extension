@@ -14,8 +14,8 @@ We activate Bits `6` and `7` in Simple Glyph Flags [1], to support new point typ
 
 Point auto-insertion:
 
-| First Knot      |     Z      |             Q              |             C              |             D              |
-| --------------- | :--------: | :------------------------: | :------------------------: | :------------------------: |
+| First \\ Second |     Z      |             Q              |             C              |             D              |
+| :-------------- | :--------: | :------------------------: | :------------------------: | :------------------------: |
 | On (`Z`)        |    N/A     |            N/A             |            N/A             |         `C` at 1/2         |
 | Quad Off (`Q`)  |    N/A     |         `Z` at 1/2         |         `Z` at 2/3         | `Z` at 1/3<br />`C` at 2/3 |
 | Cubic 1st (`C`) | `D` at 1/2 | `D` at 1/3<br />`Z` at 2/3 | `D` at 1/3<br />`Z` at 2/3 |            N/A             |
