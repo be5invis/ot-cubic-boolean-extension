@@ -7,7 +7,7 @@ We activate Bits `6` and `7` in Simple Glyph Flags [1], to support new point typ
 - Bit `0` is set —— On-curve (`Z`)
 - Bit `0` is clear:
   - Bit `7` is clear —— Quadratic off-curve (`Q`)
-    - The font parser should *always ignore* bit `6`'s value if bit `7` is clear.
+    - Bit `6` could have other meanings if bit `7` is clear.
   - Bit `7` is set:
     - Bit `6` is clear —— Cubic off-curve, 1st control point (`C`).
     - Bit `6` is set —— Cubic off-curve, 2nd control point (`D`).
