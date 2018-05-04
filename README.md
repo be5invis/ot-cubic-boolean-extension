@@ -29,7 +29,7 @@ A Boolean Composer combines two layers (Background `b`, and Argument `a`) into o
 
 - Bit `i`: Whether the areas should be inked, if it is inked in both the Background and Argument.
 - Bit `b`: Whether the areas should be inked, if it is inked in the Background **but not** the Argument.
-- Bit `a`: Whether the areas should be inked, if it is inked in the Argument **but bot** the Background.
+- Bit `a`: Whether the areas should be inked, if it is inked in the Argument **but not** the Background.
 
 There are 8 possible combinations:
 
