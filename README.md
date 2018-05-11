@@ -1,25 +1,110 @@
 # OpenType Extension: Cubic `glyf` and Booleans
 
-## `glyf` Extension —— Cubic Curves
+## `glyf` Extension —— Cubic Cplines
 
-We activate Bits `6` and `7` in Simple Glyph Flags [1], to support new point types. In a font, if any glyph used this extension, the 0th bit of `head`.`glyphDataFormat` should be set.
+We activate Bit `7` in Simple Glyph Flags [1], to support new point types. In a font, if any glyph used this extension, the 0th bit of `head`.`glyphDataFormat` should be set.
+
+In each contour, there would be three kind of control points (“Knots”)
 
 - Bit `0` is set —— On-curve (`Z`)
 - Bit `0` is clear:
   - Bit `7` is clear —— Quadratic off-curve (`Q`)
-    - Bit `6` could have other meanings if bit `7` is clear.
-  - Bit `7` is set:
-    - Bit `6` is clear —— Cubic off-curve, 1st control point (`C`).
-    - Bit `6` is set —— Cubic off-curve, 2nd control point (`D`).
+  - Bit `7` is set —— Cubic off-curve (`B`)
 
-Point auto-insertion:
+Since `Z`, `B` and `Q` knots could occur in arbitrary order, a normalization pass should be preformed right after the glyph is being rasterized. It would convert all the off-curve knots to combination of on-curve points (`Z`) or cubic control points (`C`). Things between two `Z` points could only be empty of two `C` points.
 
-| First \\ Second |     Z      |             Q              |             C              |             D              |
-| :-------------- | :--------: | :------------------------: | :------------------------: | :------------------------: |
-| On (`Z`)        |    N/A     |            N/A             |            N/A             |         `C` at 1/2         |
-| Quad Off (`Q`)  |    N/A     |         `Z` at 1/2         |         `Z` at 2/3         | `Z` at 1/3<br />`C` at 2/3 |
-| Cubic 1st (`C`) | `D` at 1/2 | `D` at 1/3<br />`Z` at 2/3 | `D` at 1/3<br />`Z` at 2/3 |            N/A             |
-| Cubic 2nd (`D`) |    N/A     |         `Z` at 1/3         |         `Z` at 1/2         | `Z` at 1/3<br />`C` at 2/3 |
+The conversion is handled knot-by-knot, while the knot before and after it are also be considered to perform high-quality conversion. A curve with only `Z` and `Q` knots would be normalized just like the current TrueType specifies, and curves with only `Z` and `B` knots would be normalized as cubic B-splines.
+
+1. Let `answer` = Empty list of (list of points).
+2. For each input knot `k` at index `i`:
+   1. Let `p` and `q` are the knot before and after it.
+   2. If `k` is a **Z** knot:
+      1. Set `answer`(`i`) to list containing 1 point:
+         - **Z**(`k`)
+   3. If `k` is a **B** knot:
+      1. If `pkq` follows **ZBZ** pattern:
+         1. Set `answer`(`i`) to a list containing 2 points:
+            - **C**(mix(`p`, `k`, 2/3)) 
+            - **C**(mix(`q`, `k`, 2/3))
+      2. Else If `pkq` follows **ZBB** or **BBZ** pattern:
+         1. Set `answer`(`i`) to a list containing 1 point:
+            - **C**(`k`)
+      3. Otherwise:
+         1. Let `factorBefore` be 1/3 if type of `p` is **Q**, 2/3 if is **B**.
+         2. Let `factorAfter` be 1/3 if type of `q` is **Q**, 2/3 if is **B**.
+         3. Let `before` = mix(`p`, `k`, `factorBefore`)
+         4. Let `after` = mix(`q`, `k`, `factorAfter`)
+         5. Set `answer`(`i`) to a list containing 3 points: 
+            - **C**(`before`)
+            - **Z**(mix(`before`, `after`, 1/2))
+            - **C**(`after`)
+   4. If `k` is a **Q** knot:
+      1. Let `halfSegBefore` = Empty point list.
+      2. Let `halfSegAfter` = Empty point list.
+      3. If `p` is a **Z** knot: Set `halfSegBefore` to list containing 1 point:
+         - **C**(mix(`p`, `k`, 2/3))
+      4. If `p` is a **Q** knot: Set `halfSegBefore` to list containing 2 points:
+         - **Z**(mix(`p`, `k`, 1/2))
+         - **C**(mix(`p`, `k`, 5/6))
+      5. If `q` is a **Z** knot: Set `halfSegAfter` to list containing 1 point:
+         - **C**(mix(`q`, `k`, 2/3))
+      6. If `p` is a **Q** knot: Set `halfSegAfter` to list containing 2 points:
+         - **C**(mix(`q`, `k`, 5/6))
+         - **Z**(mix(`q`, `k`, 1/2))
+      7. Set `answer`(`i`) to `halfSegBefore` ++ `halfSegAfter`
+3. Return the `answer` flattened.
+
+JavaScript Code
+
+```js
+function Z(pt){ return {type: "Z", x: pt.x, y: pt.y} }
+function C(pt){ return {type: "C", x: pt.x, y: pt.y} }
+function mix(pt1, pt2, factor) {
+    return {
+        x: pt1.x + (pt2.x - pt1.x) * factor,
+        y: pt1.y + (pt2.y - pt1.y) * factor
+    }
+}
+function convertKnots(knots) {
+    let answer = [];
+    for (let i = 0; i < knots.length; i++) {
+        const k = knots[i];
+        const p = knots[(i + knots.length - 1) % knots.length];
+        const q = knots[(i + knots.length + 1) % knots.length];
+        switch(k.type) {
+            case "Z" : answer[i] = [Z(k)]; break;
+            case "B" :
+                if (p.type === "Z" && q.type === "Z") {
+                    answer[i] = [C(mix(p, k, 2/3)), C(mix(q, k, 2/3))];
+                } else if (p.type === "Z" && q.type === "B" || p.type === "B" && q.type === "Z") {
+                    answer[i] = [C(k)];
+                } else {
+                    const factorBefore = p.type === "B" ? 2/3 : 1/3;
+                    const factorAfter  = q.type === "B" ? 2/3 : 1/3;
+                    const before = mix(p, k, factorBefore);
+                    const after  = mix(q, k, factorAfter);
+                    answer[i] = [C(before), Z(mix(before, after, 1/2)), C(after)]
+                }
+                break;
+            case "Q":
+                let halfSegBefore = [];
+                let halfSegAfter = [];
+                if (p.type === "Z")
+                    halfSegBefore = [C(mix(p, k, 2/3))];
+                if (p.type === "Q")
+                    halfSegBefore = [Z(mix(p, k, 1/2)), C(mix(p, k, 5/6))];
+                if (q.type === "Z")
+                    halfSegAfter  = [C(mix(q, k, 2/3))];
+                if (q.type === "Q")
+                    halfSegAfter  = [C(mix(q, k, 5/6)), Z(mix(q, k, 1/2))];
+                answer[i] = [...halfSegBefore, ...halfSegAfter]
+        }
+    }
+    return answer.flatten()
+}
+```
+
+
 
 ## Boolean Composite Extension
 
